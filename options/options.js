@@ -9,6 +9,7 @@
 
   // ======================== Initialization ========================
 
+  const btnToggleAll = document.getElementById('btn-toggle-all');
   const btnExport = document.getElementById('btn-export');
   const btnImport = document.getElementById('btn-import');
   const importFile = document.getElementById('import-file');
@@ -17,6 +18,7 @@
     widgets = await StarsPopupStorage.getWidgets();
     render();
     btnAddWidget.addEventListener('click', addWidget);
+    btnToggleAll.addEventListener('click', toggleAll);
     btnExport.addEventListener('click', exportConfig);
     btnImport.addEventListener('click', () => importFile.click());
     importFile.addEventListener('change', importConfig);
@@ -40,12 +42,18 @@
     widgets.forEach((widget, index) => {
       widgetList.appendChild(createWidgetCard(widget, index));
     });
+
+    updateToggleAllButton();
+  }
+
+  function updateToggleAllButton() {
+    const allHidden = widgets.length > 0 && widgets.every(w => w.visible === false);
+    btnToggleAll.textContent = allHidden ? 'Show All' : 'Hide All';
   }
 
   function createWidgetCard(widget, index) {
     const card = document.createElement('div');
-    card.className = 'widget-card';
-
+    card.className = `widget-card${widget.visible === false ? ' widget-card-hidden' : ''}`;
     // Header: icon preview + tooltip input + actions
     const header = document.createElement('div');
     header.className = 'widget-card-header';
@@ -90,6 +98,13 @@
     const actions = document.createElement('div');
     actions.className = 'widget-card-actions';
 
+    const isVisible = widget.visible !== false;
+    const btnToggle = document.createElement('button');
+    btnToggle.className = `btn btn-sm ${isVisible ? '' : 'btn-warning'}`;
+    btnToggle.textContent = isVisible ? 'Hide' : 'Show';
+    btnToggle.addEventListener('click', () => toggleWidget(index));
+    actions.appendChild(btnToggle);
+
     const btnDelete = document.createElement('button');
     btnDelete.className = 'btn btn-danger btn-sm';
     btnDelete.textContent = 'Delete';
@@ -124,8 +139,13 @@
     linksContainer.className = 'links-container';
 
     (widget.links || []).forEach((link, linkIndex) => {
-      linksContainer.appendChild(createLinkItem(index, linkIndex, link));
+      const linkItem = createLinkItem(index, linkIndex, link);
+      linkItem.draggable = true;
+      linkItem.dataset.linkIndex = linkIndex;
+      linksContainer.appendChild(linkItem);
     });
+
+    setupDragSort(linksContainer, widget.links, () => { save(); render(); });
 
     linksSection.appendChild(linksContainer);
     card.appendChild(linksSection);
@@ -136,6 +156,12 @@
   function createLinkItem(widgetIndex, linkIndex, link) {
     const item = document.createElement('div');
     item.className = 'link-item';
+
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    dragHandle.innerHTML = '&#x2630;';
+    dragHandle.title = 'Drag to reorder';
+    item.appendChild(dragHandle);
 
     const titleInput = document.createElement('input');
     titleInput.type = 'text';
@@ -171,11 +197,26 @@
 
   // ======================== Actions ========================
 
+  function toggleWidget(index) {
+    widgets[index].visible = widgets[index].visible === false ? true : false;
+    save();
+    render();
+  }
+
+  function toggleAll() {
+    const allHidden = widgets.every(w => w.visible === false);
+    const newState = allHidden ? true : false;
+    widgets.forEach(w => { w.visible = newState; });
+    save();
+    render();
+  }
+
   function addWidget() {
     widgets.push({
       id: `w_${Date.now()}`,
       icon: StarsPopupStorage.getDefaultIcon(),
       tooltip: 'New Widget',
+      visible: true,
       links: []
     });
     save();
@@ -183,7 +224,13 @@
   }
 
   function deleteWidget(index) {
-    if (!confirm(`Delete widget "${widgets[index].tooltip}"?`)) return;
+    const name = widgets[index].tooltip;
+    const input = prompt(`To delete "${name}", please type the widget name to confirm:`);
+    if (input === null) return;
+    if (input !== name) {
+      alert('Name does not match. Deletion cancelled.');
+      return;
+    }
     widgets.splice(index, 1);
     save();
     render();
@@ -294,6 +341,68 @@
     };
     reader.readAsText(file);
     event.target.value = '';
+  }
+
+  // ======================== Drag Sort ========================
+
+  function setupDragSort(container, array, onChange) {
+    let dragIndex = null;
+
+    container.addEventListener('dragstart', (e) => {
+      const item = e.target.closest('[draggable="true"]');
+      if (!item || item.parentElement !== container) return;
+      dragIndex = [...container.children].indexOf(item);
+      item.classList.add('drag-active');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const target = e.target.closest('[draggable="true"]');
+      if (!target || target.parentElement !== container) return;
+
+      const rect = target.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      container.querySelectorAll('[draggable="true"]').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+
+      if (e.clientY < midY) {
+        target.classList.add('drag-over-top');
+      } else {
+        target.classList.add('drag-over-bottom');
+      }
+    });
+
+    container.addEventListener('dragleave', (e) => {
+      const target = e.target.closest('[draggable="true"]');
+      if (target) target.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+
+    container.addEventListener('drop', (e) => {
+      e.preventDefault();
+      container.querySelectorAll('[draggable="true"]').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-active'));
+
+      const target = e.target.closest('[draggable="true"]');
+      if (!target || target.parentElement !== container || dragIndex === null) return;
+
+      const rect = target.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      let dropIndex = [...container.children].indexOf(target);
+      if (e.clientY >= midY) dropIndex++;
+      if (dropIndex > dragIndex) dropIndex--;
+
+      if (dropIndex !== dragIndex && dropIndex >= 0 && dropIndex < array.length) {
+        const [moved] = array.splice(dragIndex, 1);
+        array.splice(dropIndex, 0, moved);
+        onChange();
+      }
+      dragIndex = null;
+    });
+
+    container.addEventListener('dragend', () => {
+      container.querySelectorAll('[draggable="true"]').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-active'));
+      dragIndex = null;
+    });
   }
 
   // ======================== Persistence ========================

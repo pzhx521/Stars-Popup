@@ -53,7 +53,8 @@
     const widgets = await StarsPopupStorage.getWidgets();
     const positions = await StarsPopupStorage.getPositions();
 
-    widgets.forEach((widget, index) => {
+    const visibleWidgets = widgets.filter(w => w.visible !== false);
+    visibleWidgets.forEach((widget, index) => {
       const pos = positions[widget.id];
       const defaultX = window.innerWidth - WIDGET_SIZE - 20;
       const defaultY = window.innerHeight - WIDGET_SIZE - 20 - index * (WIDGET_SIZE + 10);
