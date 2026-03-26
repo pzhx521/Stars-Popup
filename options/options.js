@@ -61,7 +61,7 @@
     // Icon preview (clickable to upload)
     const iconPreview = document.createElement('div');
     iconPreview.className = 'widget-icon-preview';
-    iconPreview.style.backgroundImage = `url(${widget.icon})`;
+    iconPreview.style.backgroundImage = `url(${StarsPopupStorage.sanitizeIcon(widget.icon)})`;
     iconPreview.title = 'Click to change icon';
     iconPreview.addEventListener('click', () => uploadIcon(index));
     header.appendChild(iconPreview);
@@ -197,10 +197,19 @@
 
   // ======================== Actions ========================
 
+  function renderCard(index) {
+    const oldCard = widgetList.children[index];
+    const newCard = createWidgetCard(widgets[index], index);
+    if (oldCard) {
+      widgetList.replaceChild(newCard, oldCard);
+    }
+  }
+
   function toggleWidget(index) {
     widgets[index].visible = widgets[index].visible === false ? true : false;
     save();
-    render();
+    renderCard(index);
+    updateToggleAllButton();
   }
 
   function toggleAll() {
@@ -240,13 +249,13 @@
     if (!widgets[widgetIndex].links) widgets[widgetIndex].links = [];
     widgets[widgetIndex].links.push({ title: '', url: '' });
     save();
-    render();
+    renderCard(widgetIndex);
   }
 
   function removeLink(widgetIndex, linkIndex) {
     widgets[widgetIndex].links.splice(linkIndex, 1);
     save();
-    render();
+    renderCard(widgetIndex);
   }
 
   // ======================== Icon Upload ========================
@@ -323,13 +332,21 @@
         if (!data.widgets || !Array.isArray(data.widgets)) {
           throw new Error('Invalid format: missing "widgets" array');
         }
-        // Validate each widget has required fields
+        // Validate each widget has required fields with correct types
         for (const w of data.widgets) {
-          if (!w.id || !w.tooltip) {
-            throw new Error('Invalid widget: missing id or tooltip');
+          if (typeof w.id !== 'string' || typeof w.tooltip !== 'string') {
+            throw new Error('Invalid widget: id and tooltip must be strings');
           }
-          if (!w.icon) w.icon = StarsPopupStorage.getDefaultIcon();
-          if (!w.links) w.links = [];
+          // Sanitize icon: must be a valid image data-URI
+          w.icon = StarsPopupStorage.sanitizeIcon(w.icon);
+          if (!Array.isArray(w.links)) w.links = [];
+          // Sanitize links: filter out entries with non-string fields or unsafe URLs
+          w.links = w.links.filter(link =>
+            typeof link === 'object' && link !== null &&
+            typeof link.title === 'string' &&
+            typeof link.url === 'string' &&
+            StarsPopupStorage.isSafeUrl(link.url)
+          );
         }
         if (!confirm(`Import ${data.widgets.length} widget(s)? This will replace your current configuration.`)) return;
         widgets = data.widgets;
@@ -347,6 +364,7 @@
 
   function setupDragSort(container, array, onChange) {
     let dragIndex = null;
+    let lastOverTarget = null;
 
     container.addEventListener('dragstart', (e) => {
       const item = e.target.closest('[draggable="true"]');
@@ -354,6 +372,7 @@
       dragIndex = [...container.children].indexOf(item);
       item.classList.add('drag-active');
       e.dataTransfer.effectAllowed = 'move';
+      lastOverTarget = null;
     });
 
     container.addEventListener('dragover', (e) => {
@@ -364,13 +383,15 @@
 
       const rect = target.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
-      container.querySelectorAll('[draggable="true"]').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+      const isTop = e.clientY < midY;
 
-      if (e.clientY < midY) {
-        target.classList.add('drag-over-top');
-      } else {
-        target.classList.add('drag-over-bottom');
+      if (lastOverTarget && lastOverTarget !== target) {
+        lastOverTarget.classList.remove('drag-over-top', 'drag-over-bottom');
       }
+      lastOverTarget = target;
+
+      target.classList.remove('drag-over-top', 'drag-over-bottom');
+      target.classList.add(isTop ? 'drag-over-top' : 'drag-over-bottom');
     });
 
     container.addEventListener('dragleave', (e) => {
@@ -380,7 +401,11 @@
 
     container.addEventListener('drop', (e) => {
       e.preventDefault();
-      container.querySelectorAll('[draggable="true"]').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-active'));
+      if (lastOverTarget) {
+        lastOverTarget.classList.remove('drag-over-top', 'drag-over-bottom');
+      }
+      const dragItem = dragIndex !== null ? container.children[dragIndex] : null;
+      if (dragItem) dragItem.classList.remove('drag-active');
 
       const target = e.target.closest('[draggable="true"]');
       if (!target || target.parentElement !== container || dragIndex === null) return;
@@ -397,11 +422,17 @@
         onChange();
       }
       dragIndex = null;
+      lastOverTarget = null;
     });
 
     container.addEventListener('dragend', () => {
-      container.querySelectorAll('[draggable="true"]').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-active'));
+      if (lastOverTarget) {
+        lastOverTarget.classList.remove('drag-over-top', 'drag-over-bottom');
+      }
+      const dragItem = dragIndex !== null ? container.children[dragIndex] : null;
+      if (dragItem) dragItem.classList.remove('drag-active');
       dragIndex = null;
+      lastOverTarget = null;
     });
   }
 

@@ -10,7 +10,8 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Stars Popup Settings"
+    "default_title": "Stars Popup",
+    "default_popup": "popup/popup.html"
   },
   "background": {
     "service_worker": "background/service-worker.js"

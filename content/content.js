@@ -70,7 +70,7 @@
     const el = document.createElement('div');
     el.className = 'sp-widget';
     el.dataset.widgetId = widget.id;
-    el.style.backgroundImage = `url(${widget.icon})`;
+    el.style.backgroundImage = `url(${StarsPopupStorage.sanitizeIcon(widget.icon)})`;
     el.style.left = `${clampX(position.x)}px`;
     el.style.top = `${clampY(position.y)}px`;
 
@@ -107,10 +107,11 @@
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
 
+      const rect = el.getBoundingClientRect();
       startX = e.clientX;
       startY = e.clientY;
-      offsetX = e.clientX - el.getBoundingClientRect().left;
-      offsetY = e.clientY - el.getBoundingClientRect().top;
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
       isDragging = false;
 
       el.classList.add('sp-dragging');
@@ -171,7 +172,7 @@
 
     const headerIcon = document.createElement('img');
     headerIcon.className = 'sp-panel-header-icon';
-    headerIcon.src = widget.icon;
+    headerIcon.src = StarsPopupStorage.sanitizeIcon(widget.icon);
     header.appendChild(headerIcon);
 
     const headerTitle = document.createElement('span');
@@ -186,6 +187,7 @@
       list.className = 'sp-panel-links';
 
       widget.links.forEach(link => {
+        if (!StarsPopupStorage.isSafeUrl(link.url)) return;
         const li = document.createElement('li');
         const a = document.createElement('a');
         a.className = 'sp-panel-link';
@@ -290,20 +292,25 @@
       if (e.key === 'Escape') closePanel();
     });
 
-    // Recalculate positions on resize
+    // Recalculate positions on resize (throttled)
+    let resizeRafId = null;
     window.addEventListener('resize', () => {
-      shadowRoot.querySelectorAll('.sp-widget').forEach(el => {
-        const x = clampX(parseInt(el.style.left));
-        const y = clampY(parseInt(el.style.top));
-        el.style.left = `${x}px`;
-        el.style.top = `${y}px`;
+      if (resizeRafId) return;
+      resizeRafId = requestAnimationFrame(() => {
+        resizeRafId = null;
+        shadowRoot.querySelectorAll('.sp-widget').forEach(el => {
+          const x = clampX(parseInt(el.style.left));
+          const y = clampY(parseInt(el.style.top));
+          el.style.left = `${x}px`;
+          el.style.top = `${y}px`;
+        });
+        if (currentPanel) {
+          const widgetEl = shadowRoot.querySelector(
+            `.sp-widget[data-widget-id="${currentPanelWidgetId}"]`
+          );
+          if (widgetEl) positionPanel(currentPanel, widgetEl);
+        }
       });
-      if (currentPanel) {
-        const widgetEl = shadowRoot.querySelector(
-          `.sp-widget[data-widget-id="${currentPanelWidgetId}"]`
-        );
-        if (widgetEl) positionPanel(currentPanel, widgetEl);
-      }
     });
 
     // Listen for reload messages from service worker
