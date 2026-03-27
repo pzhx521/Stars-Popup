@@ -146,6 +146,9 @@ body {
 
 /* ============ Footer ============ */
 .popup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   border-top: 1px solid #eee;
   padding: 8px 14px;
 }
@@ -176,4 +179,25 @@ body {
 
 .btn-settings:hover svg {
   opacity: 1;
+}
+
+.btn-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: #f0f0f0;
+  color: #555;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  padding: 0;
+}
+
+.btn-theme-toggle:hover {
+  background: #e0e0e0;
+  color: #333;
 }

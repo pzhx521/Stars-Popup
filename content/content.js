@@ -15,7 +15,6 @@
   let currentPanel = null;
   let currentPanelWidgetId = null;
   let saveTimer = null;
-
   // ======================== Initialization ========================
 
   async function init() {
@@ -39,6 +38,15 @@
     shadowRoot.appendChild(tooltip);
 
     document.body.appendChild(host);
+
+    const theme = await StarsPopupStorage.getTheme();
+    applyTheme(theme);
+
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.theme) {
+        applyTheme(changes.theme.newValue || 'light');
+      }
+    });
 
     await renderWidgets();
     setupGlobalListeners();
@@ -176,6 +184,7 @@
     header.appendChild(headerIcon);
 
     const headerTitle = document.createElement('span');
+    headerTitle.className = 'sp-panel-header-title';
     headerTitle.textContent = widget.tooltip;
     header.appendChild(headerTitle);
 
@@ -319,6 +328,21 @@
         renderWidgets();
       }
     });
+  }
+
+  // ======================== Theme ========================
+
+  function applyTheme(theme) {
+    const host = document.getElementById('stars-popup-root');
+    if (host) {
+      host.dataset.theme = theme;
+    }
+    if (shadowRoot) {
+      shadowRoot.host.dataset.theme = theme;
+      // Update CSS custom property on the shadow root's inner wrapper
+      const root = shadowRoot.querySelector('.sp-theme-root');
+      if (root) root.dataset.theme = theme;
+    }
   }
 
   // ======================== Utilities ========================
